@@ -182,61 +182,15 @@ func (n *node) childOf(path string) (*node, bool) {
 func (n *node) childOrCreate(path string) *node {
 	//通配符路径
 	if path == "*" {
-		if n.starChild == nil {
-			if n.regChild != nil {
-				panic("web: 非法路由，已有正则路由。不允许同时注册通配符路由和正则路由 [*]")
-			}
-
-			if n.paramChild != nil {
-				panic("web: 非法路由，已有路径参数路由。不允许同时注册通配符路由和参数路由 [*]")
-			}
-
-			n.starChild = &node{path: "*", typ: nodeTypeAny}
-		}
-		return n.starChild
+		return n.childOrCreateStar(path)
 	}
 
 	if path[0] == ':' {
 		// 正则路径
 		if ok, _ := regexp.MatchString("^:.+\\(.+\\)$", path); ok {
-			if n.paramChild != nil {
-				panic(fmt.Sprintf("web: 非法路由，已有路径参数路由。不允许同时注册正则路由和参数路由 [%s]", path))
-			}
-
-			if n.starChild != nil {
-				panic(fmt.Sprintf("web: 非法路由，已有通配符路由。不允许同时注册通配符路由和正则路由 [%s]", path))
-			}
-
-			if n.regChild != nil {
-				if n.regChild.path != path {
-					panic(fmt.Sprintf("web: 路由冲突, 正则路由冲突, 已有:[%s], 新注册:[%s]", n.regChild.path, path))
-				}
-			} else {
-				idx := strings.Index(path, "(")
-				paraName := path[1:idx]
-				expr := path[idx+1 : len(path)-1]
-				regExpr, _ := regexp.Compile(expr)
-				n.regChild = &node{path: path, typ: nodeTypeReg, regExpr: regExpr, paramName: paraName}
-			}
-			return n.regChild
-		} else {
-			// 参数路径
-			if n.regChild != nil {
-				panic(fmt.Sprintf("web: 非法路由，已有正则路由。不允许同时注册正则路由和参数路由 [%s]", path))
-			}
-
-			if n.starChild != nil {
-				panic(fmt.Sprintf("web: 非法路由，已有通配符路由。不允许同时注册通配符路由和参数路由 [%s]", path))
-			}
-
-			if n.paramChild != nil {
-				if n.paramChild.path != path {
-					panic(fmt.Sprintf("web: 路由冲突，参数路由冲突，已有 %s，新注册 %s", n.paramChild.path, path))
-				}
-			} else {
-				n.paramChild = &node{path: path, typ: nodeTypeParam, paramName: path[1:]}
-			}
-			return n.paramChild
+			return n.childOrCreateReg(path)
+		} else { // 参数路径
+			return n.childOrCreateParam(path)
 		}
 	}
 
@@ -250,6 +204,63 @@ func (n *node) childOrCreate(path string) *node {
 		n.children[path] = target
 	}
 	return target
+}
+
+func (n *node) childOrCreateStar(path string) *node {
+	if n.regChild != nil {
+		panic("web: 非法路由，已有正则路由。不允许同时注册通配符路由和正则路由 [*]")
+	}
+
+	if n.paramChild != nil {
+		panic("web: 非法路由，已有路径参数路由。不允许同时注册通配符路由和参数路由 [*]")
+	}
+
+	if n.starChild == nil {
+		n.starChild = &node{path: "*", typ: nodeTypeAny}
+	}
+	return n.starChild
+}
+
+func (n *node) childOrCreateReg(path string) *node {
+	if n.paramChild != nil {
+		panic(fmt.Sprintf("web: 非法路由，已有路径参数路由。不允许同时注册正则路由和参数路由 [%s]", path))
+	}
+
+	if n.starChild != nil {
+		panic(fmt.Sprintf("web: 非法路由，已有通配符路由。不允许同时注册通配符路由和正则路由 [%s]", path))
+	}
+
+	if n.regChild != nil {
+		if n.regChild.path != path {
+			panic(fmt.Sprintf("web: 路由冲突, 正则路由冲突, 已有:[%s], 新注册:[%s]", n.regChild.path, path))
+		}
+	} else {
+		idx := strings.Index(path, "(")
+		paraName := path[1:idx]
+		expr := path[idx+1 : len(path)-1]
+		regExpr, _ := regexp.Compile(expr)
+		n.regChild = &node{path: path, typ: nodeTypeReg, regExpr: regExpr, paramName: paraName}
+	}
+	return n.regChild
+}
+
+func (n *node) childOrCreateParam(path string) *node {
+	if n.regChild != nil {
+		panic(fmt.Sprintf("web: 非法路由，已有正则路由。不允许同时注册正则路由和参数路由 [%s]", path))
+	}
+
+	if n.starChild != nil {
+		panic(fmt.Sprintf("web: 非法路由，已有通配符路由。不允许同时注册通配符路由和参数路由 [%s]", path))
+	}
+
+	if n.paramChild != nil {
+		if n.paramChild.path != path {
+			panic(fmt.Sprintf("web: 路由冲突，参数路由冲突，已有 %s，新注册 %s", n.paramChild.path, path))
+		}
+	} else {
+		n.paramChild = &node{path: path, typ: nodeTypeParam, paramName: path[1:]}
+	}
+	return n.paramChild
 }
 
 type matchInfo struct {
