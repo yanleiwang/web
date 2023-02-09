@@ -71,7 +71,35 @@ func (r *router) addRoute(method string, path string, handler HandleFunc) {
 // findRoute 查找对应的节点
 // 注意，返回的 node 内部 HandleFunc 不为 nil 才算是注册了路由
 func (r *router) findRoute(method string, path string) (*matchInfo, bool) {
-	panic("implement me")
+	root, ok := r.trees[method]
+	if !ok {
+		return nil, false
+	}
+
+	m := &matchInfo{}
+	if path == "/" {
+		m.n = root
+		return m, true
+	}
+
+	seqs := strings.Split(strings.Trim(path, "/"), "/")
+	for _, s := range seqs {
+		child, ok := root.childOf(s)
+		if !ok {
+			if root.typ == nodeTypeAny {
+				break
+			}
+			return nil, false
+		}
+
+		if child.typ == nodeTypeParam || child.typ == nodeTypeReg {
+			m.addValue(child.paramName, s)
+		}
+
+		root = child
+	}
+	m.n = root
+	return m, true
 }
 
 type nodeType int
@@ -119,8 +147,31 @@ type node struct {
 // child 返回子节点
 // 第一个返回值 *node 是命中的节点
 // 第二个返回值 bool 代表是否命中
+// 命中优先级
+// 1. 静态完全匹配
+// 2. 正则匹配，形式 :param_name(reg_expr)
+// 3. 路径参数匹配：形式 :param_name
+// 4. 通配符匹配：*
 func (n *node) childOf(path string) (*node, bool) {
-	panic("implement me")
+	if n.children != nil {
+		child, ok := n.children[path]
+		if ok {
+			return child, true
+		}
+	}
+
+	if n.regChild != nil {
+		if n.regChild.regExpr.MatchString(path) {
+			return n.regChild, true
+		}
+	}
+
+	if n.paramChild != nil {
+		return n.paramChild, true
+	}
+
+	return n.starChild, n.starChild != nil
+
 }
 
 // childOrCreate 查找子节点，如果不存在则创建一个
